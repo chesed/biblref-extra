@@ -1,0 +1,176 @@
+%% bibleref-extra.sty
+%%
+%% Registers non-canonical (pseudepigraphal / Qumran / patristic) books with
+%% bibleref and bibleref-parse, using their SBL Handbook of Style
+%% abbreviations, so that \bref, \ibibleverse and the index treat them like
+%% any other book:
+%%
+%%   \bref{1Clem 1:1}   ->  1 Clem. 1:1
+%%   \bref{1En 60:1-8}  ->  1 En. 60:1-8
+%%   \bref{1QS 1:1}     ->  1QS 1:1
+%%
+%% Load after bibleref, bibleref-parse and bibleref-sbl.
+%%
+%% Adding a book is ONE line -- the 4th argument names the index category the
+%% book belongs to, and it is auto-filed and auto-numbered under that heading:
+%%
+%%   \brx@newbook {canonical name} {SBL abbreviation} {aliases} {category}
+%%
+%%   \brx@newbook {1Clem} {1~Clem.} {1Clem,1Clement} {cf}
+%%   \brx@newbook {2Clem} {2~Clem.} {2Clem,2Clement} {cf}
+%%   \brx@newbook {Jub}   {Jub.}    {Jub,Jubilees}   {stl}
+%%   \brx@newbook {4Q525} {4Q525}   {4Q525}          {stl}
+%%
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{bibleref-extra}[2026/11/19 Non-canonical books for bibleref (SBL abbreviations)]
+
+\RequirePackage{bibleref}
+\RequirePackage{bibleref-parse}
+\RequirePackage{bibleref-sbl}
+
+\makeatletter
+
+% --- Index categories --------------------------------------------------------
+% bibleref-sbl already owns the canonical categories and their sort numbers:
+%   10@ Old Testament/Hebrew Bible
+%   20@ Deuterocanonical Books
+%   30@ New Testament
+%
+% \brx@newcategory {key} {sort number} {heading text}
+%   key         : short token you pass as the 4th argument of \brx@newbook
+%   sort number : where the heading sorts (slot it between the numbers above)
+%   heading     : text printed in the Ancient Sources index
+\newcommand*{\brx@newcategory}[3]{%
+  \expandafter\def\csname brx@num@#1\endcsname{#2}%
+  \expandafter\newcommand\csname brx@title@#1\endcsname{#3}%
+  \newcounter{brx@cnt@#1}%
+}
+
+% Our two non-canonical categories, positioned by their sort number:
+%   stl  25 -> Second Temple Literature   (after Deuterocanonical, before NT)
+%   cf   40 -> Church Fathers             (after the New Testament)
+\brx@newcategory{stl}{25}{Second Temple Literature}
+\brx@newcategory{qumran}{28}{Qumran}
+\brx@newcategory{cf}{40}{Church Fathers}
+
+% --- Book registration --------------------------------------------------------
+% \brx@newbook {canonical name} {SBL abbreviation} {aliases} {category}
+%   1. \addbiblebook  : tells bibleref the book exists + its SBL title
+%   2. \brpDefineBook : teaches bibleref-parse to resolve each alias
+%   3. \brx@file      : files it under {category}, auto-numbered
+%
+% The 4th argument is a category registered by \brx@newcategory above. Books
+% are numbered automatically (01, 02, ...) in the order you add them, so you
+% never hand-maintain \biblerefmap lines or book numbers yourself.
+\newcommand*{\brx@newbook}[4]{%
+  \addbiblebook{#1}{#2}%
+  \def\do##1{\brpDefineBook{##1}{#1}}%
+  \docsvlist{#3}%
+  \brx@file{#2}{#4}%
+}
+
+% \brx@paddig {n} : zero-pad a book number to two digits (1 -> 01, 25 -> 25)
+\newcommand*{\brx@paddig}[1]{\ifnum#1<10 0\fi\number#1}%
+
+% \brx@file {SBL abbreviation} {category key}
+%   Emits the \biblerefmap that files the book under its category. The index
+%   sort key is the SBL abbreviation (the book's normalized index-sort title);
+%   the book number within the category is taken from that category's counter,
+%   and frozen here so later books in the same category don't clobber it.
+\newcommand*{\brx@file}[2]{%
+  \@ifundefined{brx@num@#2}{%
+    \PackageError{bibleref-extra}%
+      {Unknown index category '#2'}%
+      {Use a registered category: stl (Second Temple Literature) or cf
+       (Church Fathers) -- or define one first with
+       \string\brx@newcategory{key}{number}{heading}.}%
+  }{%
+    \stepcounter{brx@cnt@#2}%
+    \edef\brx@val{%
+      \csname brx@num@#2\endcsname @\csname brx@title@#2\endcsname !\brx@paddig{\value{brx@cnt@#2}}%
+    }%
+    % Build the exact \biblerefmap{key}{value} call with literal (already
+    % expanded) key and value, then run it -- this is byte-for-byte the same
+    % form as a hand-written \biblerefmap line.
+    \edef\brx@call{\noexpand\biblerefmap{#1}{\brx@val}}%
+    \brx@call%
+  }%
+}
+
+% --- The books ----------------------------------------------------------------
+%   {canonical name} {SBL abbreviation} {aliases} {category}
+\brx@newbook {1Clem} {1~Clem.} {1Clem,1Clement} {cf}
+\brx@newbook {1En}   {1~En.}   {1En,1Enoch}     {stl}
+\brx@newbook {1QS}      {1QS}      {1QS}          {qumran}
+\brx@newbook {11QTempl} {11QTempl} {11QTempl,11Q5} {qumran}
+
+% --- Qumran "on the fly" registration ----------------------------------------
+% Qumran shelf marks (1QS, 4Q521, 11QTempl, ...) are too numerous to list.
+% The rule: a book token that STARTS WITH A DIGIT and CONTAINS a capital Q is a
+% Qumran shelf mark; if bibleref doesn't already know it (as canonical name or
+% alias), register it on the fly -- canonical name = display = alias = the shelf
+% mark, filed under the qumran category. Two guards make it work on both paths:
+%   * \brp@bookname : parse stage -- register before the alias check, so the
+%                     "unknown bookname" log error never fires.
+%   * \@bible@verse : use stage   -- register before the "Unknown book" check,
+%                     so the fatal error never fires (covers \ibibleverse, etc.)
+% Both are no-ops once the book is known, so nothing is double-registered and
+% named books (1QS, 11QTempl) keep their aliases.
+
+% \brx@testfisd {token} : sets \ifbrx@fisd -- true iff the first char is a digit
+\newif\ifbrx@fisd
+\newcommand*{\brx@testfisd}[1]{\brx@fisdfalse\brx@testfisd@#1\relax}
+\def\brx@testfisd@#1#2\relax{%
+  \ifx#10 \brx@fisdtrue
+  \else \ifx#11 \brx@fisdtrue
+  \else \ifx#12 \brx@fisdtrue
+  \else \ifx#13 \brx@fisdtrue
+  \else \ifx#14 \brx@fisdtrue
+  \else \ifx#15 \brx@fisdtrue
+  \else \ifx#16 \brx@fisdtrue
+  \else \ifx#17 \brx@fisdtrue
+  \else \ifx#18 \brx@fisdtrue
+  \else \ifx#19 \brx@fisdtrue
+  \else \brx@fisdfalse
+  \fi\fi\fi\fi\fi\fi\fi\fi\fi\fi
+}
+
+% \brx@testhasq {token} : sets \ifbrx@hasq -- true iff the token contains a Q
+\newif\ifbrx@hasq
+\newcommand*{\brx@testhasq}[1]{\brx@hasqfalse\brx@hasqscan#1\relax}
+\def\brx@hasqscan#1{%
+  \ifx#1\relax
+  \else
+    \ifx#1Q \brx@hasqtrue \fi
+    \brx@hasqscan
+  \fi
+}
+
+% \brx@qumrantry {token} : register {token} as a Qumran book if (and only if)
+% it is an unrecognised shelf mark. Idempotent.
+%
+% NOTE on the idiom: we test "is br@<name> defined?" with \@ifundefined{br@#1}.
+% Do NOT use \ifdefined\csname br@#1\endcsname here -- \ifdefined consumes the
+% immediately-following token, which is the \csname PRIMITIVE (always defined,
+% so the test is always true) and leaves `br@#1 \endcsname` in the stream, so
+% every known book leaks a literal `br@<name>` and throws `! Extra \endcsname`.
+% (\@ifundefined{br@#1} tests the real csname by name and branches cleanly.)
+\newcommand*{\brx@qumrantry}[1]{%
+  \@ifundefined{br@#1}{%
+    \@ifundefined{brp@bk@#1}{%
+      \brx@testfisd{#1}\ifbrx@fisd
+        \brx@testhasq{#1}\ifbrx@hasq
+          \brx@newbook{#1}{#1}{#1}{qumran}%
+        \fi
+      \fi
+    }{}%
+  }{}%
+}
+
+\let\brx@brpbookname\brp@bookname
+\renewcommand*{\brp@bookname}[1]{\brx@qumrantry{#1}\brx@brpbookname{#1}}
+\let\brx@bibleverse\@bible@verse
+\renewcommand*{\@bible@verse}[1]{\brx@qumrantry{#1}\brx@bibleverse{#1}}
+
+\makeatother
+\endinput

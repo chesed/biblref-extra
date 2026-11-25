@@ -1,0 +1,60 @@
+% test-split.tex — harness: xstring split + \qref + \bref router (bibleref-extra).
+%
+% Build from a directory that has NO local bibleref-extra.sty (so ~/texmf is
+% the copy under test), e.g.:
+%   cd /tmp/opencode/qref_probe && cp ~/texmf/tex/latex/bibleref-extra/test-split.tex .
+%   lualatex -interaction=nonstopmode -halt-on-error test-split.tex
+%
+\documentclass{article}
+\usepackage[splitmultiplerefinindex]{bibleref}
+\usepackage{bibleref-parse}
+\usepackage[ancient sources]{sblidx}
+\usepackage{bibleref-sbl}
+\usepackage{bibleref-extra}
+
+\makeatletter
+
+% ---------- 1) xstring primitives, incl. the no-space case ----------
+\newcommand{\tXShow}[1]{%
+  \StrBefore{#1}{ }[\zz] before=[\zz]\quad
+  \StrBehind{#1}{ }[\zz] behind=[\zz]\quad
+  has=[\IfSubStr{#1}{ }{yes}{no}]\par
+}
+
+% ---------- 2) THE SPLIT (xstring, presence-gated) ----------
+\def\dosplit#1{\brx@split{#1}\noindent IN=[#1]\quad SHELF=[\brx@shelf]\quad REF=[\brx@ref]\par}
+
+\makeatother
+
+\begin{document}
+\section*{1) xstring primitives (incl. the no-space case)}
+\noindent A [4Q413 32:1] : \tXShow{4Q413 32:1}
+\noindent B [11QTempl 1:1]: \tXShow{11QTempl 1:1}
+\noindent C [4Q521]      : \tXShow{4Q521}
+
+\section*{2) Split (shelf | ref) -- five cases}
+\dosplit{4Q413 32:1}
+\dosplit{11QTempl 1:1}
+\dosplit{4Q521}
+\dosplit{1QS 23:1}
+\dosplit{11Q5 32:1}
+
+\section*{3) \textbackslash qref emission (render)}
+\noindent A: \qref{4Q413 32:1}\par
+\noindent B: \qref{1QS 10:2}\par
+\noindent C: \qref{11QTempl 1:1}\par
+\noindent D: \qref{4Q17 12:1}\par
+\noindent E: \qref{4Q521}\par
+
+\section*{4) \textbackslash bref router (reading order, mixed, cf., star, opt)}
+\noindent 1. Single std: \bref{Gen 1:1}\par
+\noindent 2. Multi std: \bref{Gen. 1:1; Num 17:12}\par
+\noindent 3. Single Qumran: \bref{1QS 23:1}\par
+\noindent 4. Bare Qumran: \bref{4Q521}\par
+\noindent 5. Mixed list: \bref{Gen. 1:1; 1QS 23:1; Num 17:12}\par
+\noindent 6. Item with cf: \bref{Gen. 1:1; cf.\ 1QS 10:2; Num 17:12}\par
+\noindent 7. Star: \bref*{Gen 1:1; Num 17:12}\par
+\noindent 8. Opt: \bref[1]{Gen 1:1; Num 17:12}\par
+\noindent 9. Live cites: \bref{1QS 23:1} and \bref{4Q17 12:1}\par
+
+\end{document}
